@@ -5,7 +5,12 @@ class Edge {
     this.to = to
     this.cost = cost
     this.selected = false
+    this.highlightColor = undefined
+    this.color = color(0,0,0)
   }
+
+  highlight(color) { this.highlightColor = color}
+  clearHighlight() { this.highlight(undefined) }
 
   select() {
     this.selected = true
@@ -16,14 +21,13 @@ class Edge {
                           this.from.y * this.from.scale)
     let v1 = createVector(this.to.x * this.from.scale, 
                           this.to.y * this.from.scale)
+                     
+    if (this.selected || this.highlightColor) {
+      let c = this.selected ? color(255,200,0) : this.highlightColor
 
-    if (this.selected) {
-      drawArrow(v0, v1, color(255,200,0), this.from.r/1.4, undefined, 10, 6)
+      drawArrow(v0, v1, c, this.from.r/1.4, undefined, 10, 6)
     }
-
-    // drawArrow(v0, dir.mult(30), 'red')
-    drawArrow(v0, v1, 'black', this.from.r/1.25, this.cost)
-    // line(v0.x, v0.y, v1.x, v1.y)
+    drawArrow(v0, v1, this.color, this.from.r/1.25, this.cost)
   }
 }
 
@@ -83,7 +87,7 @@ class Node {
     this.scale = 60
     this.type = type
     this.selected = false
-    this.highlightColumn = undefined
+    this.highlightColor = undefined
     this.comment = undefined
   }
 
@@ -93,9 +97,19 @@ class Node {
 
   select() { this.selected = true }
 
-  highlight(col) { this.highlightColumn = col }
+  highlight(col) { this.highlightColor = col }
+  clearHighlight() { this.highlight(undefined) }
 
-  setComment(text) { this.comment = text }
+  setComment(text) { 
+    if (text) {
+      this.comment = {text: text, color: color(100,255,100) }
+      let self = this
+      setTimeout(function(){ self.comment.color = color(0,0,0) }, 1000);
+   } else {
+     this.comment = undefined
+   }
+
+  }
 
   draw() {
     noStroke()
@@ -115,8 +129,8 @@ class Node {
     push()
     translate(this.x*this.scale, this.y*this.scale)
 
-    if (this.selected || this.highlightColumn) {
-      let c = this.selected ? color(255,200,0) : this.highlightColumn
+    if (this.selected || this.highlightColor) {
+      let c = this.selected ? color(255,200,0) : this.highlightColor
       fill(c)
       circle(0, 0, this.r*1.25)
     }
@@ -130,8 +144,9 @@ class Node {
 
     if (this.comment) {
       textAlign(LEFT, BOTTOM);
+      fill(this.comment.color)
       const dist = this.r*.5
-      text(this.comment, dist, -dist)
+      text(this.comment.text, dist, -dist)
     }
     pop()
   }
@@ -210,22 +225,34 @@ function sleep(ms) {
     let curCost = 0
     let self = this
     unvisited = unvisited.filter(item => item != curNode) // remove start
+    const highlightColor = color(100,255,100)
 
     // run
     let idx = 0
     while (curNode != end) {
       // propagate cost
-      this.graph.edges.forEach(e => {
+      let lastEdges = []
+
+
+      for(let i=0; i<this.graph.edges.length; i++) {
+        let e = this.graph.edges[i]
+
         if (e.from.id === curNode) {
           let cost = e.cost
           let newCost = curCost + cost
+          lastEdges.push(e)
+          e.highlight(highlightColor)
           if (costs[e.to.id] > newCost) {
             costs[e.to.id] = newCost
             this.graph.nodes[e.to.id].setComment('Cost: '+str(newCost))
             selected[e.to.id] = e.from.id
           }
+          draw()
+          await sleep(1000)
         }
-      })
+      }
+      lastEdges.forEach(e => e.clearHighlight())
+
       console.log(curNode, selected);
       // pick next node
       lastNode = curNode
@@ -235,8 +262,8 @@ function sleep(ms) {
       // get new node and cost
       curCost = Math.min(...costsTmp)
       curNode = unvisited[costsTmp.indexOf(curCost)]
-      this.graph.nodes[lastNode].highlight(undefined)
-      this.graph.nodes[curNode].highlight(color(100,255,100))
+      this.graph.nodes[lastNode].clearHighlight()
+      this.graph.nodes[curNode].highlight(highlightColor)
       
       // mark current node as visited
       unvisited = unvisited.filter(item => item != curNode)
@@ -255,8 +282,6 @@ function sleep(ms) {
       return;
     }
 
-    this.graph.nodes.forEach(n => n.setComment(undefined))
-
     for (let i=end; ; i=selected[i]) {
       graph.select(selected[i], i)
       console.log(i, selected[i]);
@@ -265,6 +290,8 @@ function sleep(ms) {
         break
       }
     }
+
+    // this.graph.nodes.forEach(n => n.setComment(undefined))
 
   }
 }
