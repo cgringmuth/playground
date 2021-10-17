@@ -1,10 +1,18 @@
 
 class Edge {
+  static TYPE_COST_FIXED = 0
+  static TYPE_COST_CALCULATE = 1
+
   constructor(from, to, cost) {
     this.from = from
     this.to = to
-    this.cost = cost
-    this.selected = false
+    this.type = cost ? Edge.TYPE_COST_FIXED : Edge.TYPE_COST_CALCULATE
+    if (this.type == Edge.TYPE_COST_CALCULATE) {
+      this.cost = from.distance(to)
+    } else {
+      this.cost = cost
+    }
+    this._route = false
     this.highlightColor = undefined
     this.color = color(0,0,0)
   }
@@ -12,22 +20,23 @@ class Edge {
   highlight(color) { this.highlightColor = color}
   clearHighlight() { this.highlight(undefined) }
 
-  select() {
-    this.selected = true
+  route() { this._route = true }
+  clearRoute() { this._route = false }
+
+  updateCost() {
+    this.cost = this.from.distance(this.to)
   }
 
   draw() {
-    let v0 = createVector(this.from.x * this.from.scale, 
-                          this.from.y * this.from.scale)
-    let v1 = createVector(this.to.x * this.from.scale, 
-                          this.to.y * this.from.scale)
+    let v0 = createVector(this.from.x, this.from.y)
+    let v1 = createVector(this.to.x, this.to.y)
                      
-    if (this.selected || this.highlightColor) {
-      let c = this.selected ? color(255,200,0) : this.highlightColor
+    if (this._route || this.highlightColor) {
+      let c = this._route ? color(255,200,0) : this.highlightColor
 
       drawArrow(v0, v1, c, this.from.r/1.4, undefined, 10, 6)
     }
-    drawArrow(v0, v1, this.color, this.from.r/1.25, this.cost)
+    drawArrow(v0, v1, this.color, this.from.r/1.25, this.cost.toFixed(2))
   }
 }
 
@@ -83,11 +92,18 @@ class Node {
     this.y = y
     this.r = 30
     this.id = id
-    this.scale = 60
     this.type = type
     this.selected = false
+    this._route = false
     this.highlightColor = undefined
     this.comment = undefined
+    this.color = color(255, 255, 255)
+  }
+
+  distance(n) {
+    const dx = n.x - this.x
+    const dy = n.y - this.y
+    return Math.sqrt(dx*dx + dy*dy)
   }
 
   setType(type) {
@@ -95,6 +111,9 @@ class Node {
   }
 
   select() { this.selected = true }
+  deselect() { this.selected = false }
+  route() { this._route = true }
+  clearRoute() { this._route = false }
 
   highlight(col) { this.highlightColor = col }
   clearHighlight() { this.highlight(undefined) }
@@ -113,7 +132,7 @@ class Node {
   draw() {
     noStroke()
 
-    let c = color(255, 255, 255)
+    let c = this.color
     switch (this.type) {
       case Node.TYPE_START:
         c = color(200, 75, 75)
@@ -126,14 +145,15 @@ class Node {
     }
 
     push()
-    translate(this.x*this.scale, this.y*this.scale)
+    translate(this.x, this.y)
 
-    if (this.selected || this.highlightColor) {
-      let c = this.selected ? color(255,200,0) : this.highlightColor
+    if (this._route || this.highlightColor) {
+      let c = this._route ? color(255,200,0) : this.highlightColor
       fill(c)
       circle(0, 0, this.r*1.25)
     }
 
+    c = this.selected ? color(100, 200, 200) : c
     fill(c)
     circle(0, 0, this.r)
 
@@ -148,6 +168,13 @@ class Node {
       text(this.comment.text, dist, -dist)
     }
     pop()
+  }
+
+  isInside(x, y) {
+    const dx = x-this.x
+    const dy = y-this.y
+    const inside = Math.sqrt(dx*dx + dy*dy) <= this.r
+    return inside
   }
 }
 
@@ -185,20 +212,54 @@ class Graph {
     this.nodes[id].setType(Node.TYPE_END)
   }
 
-  select(n0, n1) {
-    this.nodes[n0].select()
-    this.nodes[n1].select()
+  route(n0, n1) {
+    this.nodes[n0].route()
+    this.nodes[n1].route()
     this.edges.forEach(e => {
       if (e.from.id === n0 && e.to.id === n1) {
-        e.select()
+        e.route()
       }
     })
+  }
+
+  reset() {
+    this.nodes.forEach(n => n.clearRoute())
+    this.edges.forEach(e => e.clearRoute())
+  }
+
+  getObject(x,y) {
+    const clickedObjs = this.nodes.filter(n => n.isInside(x,y))
+    if (clickedObjs.length > 0) {
+      return clickedObjs[0]
+    }
+    return undefined
+  }
+
+  updateCost(node) {
+    this.edges
+      .filter(e => e.to === node || e.from === node)
+      .forEach(e => e.updateCost())
   }
 }
 
 
 function sleep(_ms) {
   return new Promise(resolve => setTimeout(resolve, _ms))
+}
+
+
+
+function getClosest(arr, num) {
+  let idx = Number.MAX_VALUE
+  let diff = Number.MAX_VALUE
+  for(let i=0; i<arr.length; i++) {
+    const curDiff = Math.abs(arr[i]-num)
+    if (diff > curDiff) {
+      idx = i
+      diff = curDiff
+    }
+  }
+  return idx
 }
 
  class Dijkstra {
@@ -239,7 +300,7 @@ function sleep(_ms) {
           e.highlight(highlightColor)
           if (costs[e.to.id] > newCost) {
             costs[e.to.id] = newCost
-            this.graph.nodes[e.to.id].setComment('Cost: '+str(newCost))
+            this.graph.nodes[e.to.id].setComment('Cost: '+str(newCost.toFixed(2)))
             selected[e.to.id] = e.from.id
           }
           render()
@@ -248,15 +309,15 @@ function sleep(_ms) {
       }
       lastEdges.forEach(e => e.clearHighlight())
 
-      console.log(curNode, selected);
       // pick next node
       lastNode = curNode
-      let costsTmp = unvisited.map(i => costs[i])
+      const costsTmp = unvisited.map(i => costs[i])
       // console.log(costsTmp);
 
       // get new node and cost
       curCost = Math.min(...costsTmp)
-      curNode = unvisited[costsTmp.indexOf(curCost)]
+      // curNode = unvisited[costsTmp.indexOf(curCost)]
+      curNode = unvisited[getClosest(costsTmp, curCost)]
       this.graph.nodes[lastNode].clearHighlight()
       this.graph.nodes[curNode].highlight(highlightColor)
       
@@ -274,13 +335,14 @@ function sleep(_ms) {
 
     } 
 
+    this.graph.nodes[curNode].clearHighlight()
     if (curNode != end) {
       return;
     }
 
     for (let i=end; ; i=selected[i]) {
-      graph.select(selected[i], i)
-      console.log(i, selected[i]);
+      graph.route(selected[i], i)
+      // console.log(i, selected[i]);
 
       if (selected[i] == start) {
         break
@@ -312,34 +374,45 @@ function setup() {
   canvas = p5canvas.canvas
 
   graph = new Graph(6)
-  graph.addNode(0, 1)
-  graph.addNode(0, 3)
-  graph.addNode(1, 2)
-  graph.addNode(2, 6)
-  graph.addNode(2, 0)
-  graph.addNode(4, 5)
-  graph.addNode(5, 3)
+  graph.addNode(50, 100)
+  graph.addNode(50, 220)
+  graph.addNode(110, 160)
+  graph.addNode(170, 400)
+  graph.addNode(170, 40)
+  graph.addNode(290, 340)
+  graph.addNode(350, 220)
 
-  graph.addEdge(0, 1, 50)
-  graph.addEdge(0, 2, 5)
-  graph.addEdge(2, 4, 150)
-  graph.addEdge(5, 3, 15)
-  graph.addEdge(3, 5, 2005)
-  graph.addEdge(1, 3, 75)
-  graph.addEdge(4, 6, 555)
-  graph.addEdge(6, 5, 1005)
-  graph.addEdge(5, 1, 15)
-  // graph.addEdge(1, 5, 15)
-  graph.addEdge(1, 6, 255)
+  graph.addEdge(0, 1)
+  graph.addEdge(0, 2)
+  graph.addEdge(2, 4)
+  graph.addEdge(5, 3)
+  graph.addEdge(3, 5)
+  graph.addEdge(1, 3)
+  graph.addEdge(4, 6)
+  graph.addEdge(6, 5)
+  graph.addEdge(5, 1)
+  graph.addEdge(1, 6)
+
+  // graph.addEdge(0, 1, 50)
+  // graph.addEdge(0, 2, 5)
+  // graph.addEdge(2, 4, 150)
+  // graph.addEdge(5, 3, 15)
+  // graph.addEdge(3, 5, 2005)
+  // graph.addEdge(1, 3, 75)
+  // graph.addEdge(4, 6, 555)
+  // graph.addEdge(6, 5, 1005)
+  // graph.addEdge(5, 1, 15)
+  // graph.addEdge(1, 6, 255)
 
   let dijkstra = new Dijkstra(graph)
-
   route = dijkstra.calcRoute(0,5)
 
 }
 
 function draw() {
   render()
+  // circle(mouseX, mouseY, 30)
+
 }
 
 let capStarted = false
@@ -351,7 +424,7 @@ function render() {
   push()
   clear()
   background(150)
-  translate(50, 40)
+  // translate(50, 40)
   graph.draw()
   pop()
 
@@ -361,4 +434,42 @@ function render() {
   //   capturer.save()
   //   noLoop()
   // }
+}
+
+let curObj
+
+function mousePressed() {
+  curObj = graph.getObject(mouseX, mouseY)
+}
+
+let lastObj
+function mouseMoved() {
+  curObj = graph.getObject(mouseX, mouseY)
+  if (lastObj && lastObj != curObj) {
+    lastObj.deselect()
+  }
+  if (curObj) {
+    curObj.select()
+    lastObj = curObj
+  }
+}
+
+function mouseReleased() {
+  curObj = undefined
+}
+
+function mouseDragged() {
+  if (!curObj) { return }
+  curObj.x = mouseX
+  curObj.y = mouseY
+  graph.updateCost(curObj)
+}
+
+
+function keyPressed() {
+  if (keyCode === 82) {
+    graph.reset()
+    let dijkstra = new Dijkstra(graph)
+    route = dijkstra.calcRoute(0,5)
+  }
 }
