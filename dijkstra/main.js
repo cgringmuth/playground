@@ -60,7 +60,6 @@ function drawVec(base, vec, c, margin, str, arrowSize=7, sweight=2) {
   pop();
 }
 
-
 function textBox(textStr, x, y) {
   let bbox = font.textBounds(textStr, x, y, 12);
   fill(255);
@@ -104,7 +103,7 @@ class Node {
     if (text) {
       this.comment = {text: text, color: color(100,255,100) }
       let self = this
-      setTimeout(function(){ self.comment.color = color(0,0,0) }, 1000);
+      setTimeout(() => { self.comment.color = color(0,0,0) }, 1000);
    } else {
      this.comment = undefined
    }
@@ -198,13 +197,9 @@ class Graph {
 }
 
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+function sleep(_ms) {
+  return new Promise(resolve => setTimeout(resolve, _ms))
 }
-
-// function sleep(ms) {
-//   await _sleep(ms)
-// }
 
  class Dijkstra {
   constructor(graph) {
@@ -247,8 +242,8 @@ function sleep(ms) {
             this.graph.nodes[e.to.id].setComment('Cost: '+str(newCost))
             selected[e.to.id] = e.from.id
           }
-          draw()
-          await sleep(1000)
+          render()
+          await sleep(ms)
         }
       }
       lastEdges.forEach(e => e.clearHighlight())
@@ -274,8 +269,9 @@ function sleep(ms) {
         break
       }
 
-      draw()
-      await sleep(1000)
+      render()
+      await sleep(ms)
+
     } 
 
     if (curNode != end) {
@@ -291,16 +287,29 @@ function sleep(ms) {
       }
     }
 
-    // this.graph.nodes.forEach(n => n.setComment(undefined))
-
   }
 }
 
 let graph
+let capturer
+let stopRec=false
+const ms=1000
+let canvas
 
 function setup() {
+
+  // Create a capturer that exports an animated GIF
+  // Notices you have to specify the path to the gif.worker.js 
+  // capturer = new CCapture({ 
+  //       format: 'gif',
+  //       // workersPath: 'libs/gifjs/',
+  //       verbose: true,
+  //       framerate: 10
+  //     })
+
   // put setup code here
-  createCanvas(600,600)
+  var p5canvas = createCanvas(450,450)
+  canvas = p5canvas.canvas
 
   graph = new Graph(6)
   graph.addNode(0, 1)
@@ -322,12 +331,6 @@ function setup() {
   graph.addEdge(5, 1, 15)
   // graph.addEdge(1, 5, 15)
   graph.addEdge(1, 6, 255)
-  // graph.addEdge(6, 1, 15)
-
-  // graph.select(0,2)
-  // graph.select(2,4)
-  // graph.select(4,6)
-  // graph.select(6,5)
 
   let dijkstra = new Dijkstra(graph)
 
@@ -336,10 +339,26 @@ function setup() {
 }
 
 function draw() {
+  render()
+}
+
+let capStarted = false
+function render() {
+  // if (!capStarted) {
+  //   capturer.start()
+  //   capStarted = true
+  // }
   push()
   clear()
   background(150)
-  translate(150, 75)
+  translate(50, 40)
   graph.draw()
   pop()
+
+  // capturer.capture(canvas)
+  // if (stopRec) {
+  //   capturer.stop()
+  //   capturer.save()
+  //   noLoop()
+  // }
 }
