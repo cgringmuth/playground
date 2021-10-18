@@ -355,7 +355,7 @@ function getClosest(arr, num) {
 let graph
 let capturer
 let stopRec=false
-const ms=1000
+const ms=150
 let canvas
 
 function setup() {
